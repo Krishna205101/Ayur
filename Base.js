@@ -20,7 +20,7 @@ db.exec([{ sql: 'PRAGMA foreign_keys = ON;', args: [] }], false, () =>
     console.log('Foreign keys turned on')
 );
 
-export default function App() {
+export default function Base() {
 
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.ALL)
 
@@ -29,10 +29,9 @@ export default function App() {
     const [restoreVisible, setRestoreVisible] = useState(false)
     const [signinVisible, setSigninVisible] = useState(false)
     const [backUpKey, setBackUpKey] = useState("")
-    const [restoring, setRestoring] = useState(false)
 
     useEffect(() => {
-
+        
         db.transaction((tx) => {
             tx.executeSql(`CREATE TABLE IF NOT EXISTS User(
               Id TEXT,
@@ -138,6 +137,14 @@ export default function App() {
               Vishesha TEXT REFERENCES Vishesha (Id) 
             );`, [])
 
+            tx.executeSql(`CREATE TABLE IF NOT EXISTS Receipt(
+              Prescription TEXT REFERENCES Prescription (PrescriptionId),
+              Aushadham    TEXT REFERENCES Aushadham (Id),
+              Dose         TEXT REFERENCES Dose (Id),
+              Samayam      TEXT REFERENCES Samayam (Id),
+              Anupanam     TEXT REFERENCES Anupanam (Id) 
+            );`, [])
+
         })
         getData()
         getLogin()
@@ -179,7 +186,6 @@ export default function App() {
         Google.logOutAsync()
         AsyncStorage.removeItem('google')
         setSigninVisible(childData)
-        setSignin(!childData)
     }
 
     const handleSubmit = async () => {
@@ -206,16 +212,18 @@ export default function App() {
                 AsyncStorage.setItem("google", result.accessToken)
                 Alert.alert("Welcome", result.user.name)
                 setSigninVisible(false)
-                // setRestoreVisible(true)
+                setRestoreVisible(true)
                 db.transaction((tx) => {
                     tx.executeSql(`SELECT * FROM User`, [], (_, { rows: { _array } }) => {
-                        if (_array.length > 0) {
-                            setRestoreVisible(false)
-                        }
-                        else {
-                            setRestoreVisible(true)
-                        }
-                    }, (err) => console.log("Database Error"))
+                        console.log(_array.length)
+                        console.log("OK")
+                        // if(_array.length > 0){
+                        //   setRestoreVisible(false)
+                        // }
+                        // else{
+                        //   setRestoreVisible(true)
+                        // }
+                    })
                 })
             })
         }
@@ -226,21 +234,27 @@ export default function App() {
 
     const restore = async () => {
 
+        db.transaction((tx) => {
+            tx.executeSql(`SELECT * FROM User`, [], (_, { rows: { _array } }) => {
+                console.log(_array)
+            })
+        })
+
         const value = await AsyncStorage.getItem("google")
-        fetch(`https://www.googleapis.com/drive/v3/files/${backUpKey}?alt=media`, {
+        fetch(`https://www.googleapis.com/drive/v3/files/1zmyXo9mU9jICoUiYkMYsfAgjCcqHooYt?alt=media`, {
             headers: {
                 Authorization: "Bearer " + value,
                 "Content-Type": "text/plain"
             }
         })
             .then((response) => response.text()).then((resJson) => {
-                let data = JSON.parse(resJson)
-                if (data.error) {
+                if (resJson.error) {
                     Alert.alert("Failure", "File Not Found")
                 }
                 else {
-                    setRestoring(true)
-                    console.log(data.Patient.length)
+                    // console.log(resJson)
+                    let data = JSON.parse(resJson)
+                    console.log(data.User[0])
                     db.transaction((tx) => {
                         tx.executeSql(`INSERT INTO User (Id,Name,Email,Phone,LandLine,Address,Hospital,Description,Logo1,Logo2)
                             VALUES (?,?,?,?,?,?,?,?,?,?);`,
@@ -297,8 +311,13 @@ export default function App() {
 
                         for (let i = 0; i < data.Prescription.length; i++) {
                             tx.executeSql(`INSERT INTO Prescription (PrescriptionId,PatientId,Bp,Rbs,Height,Weight,Visited,FollowUpDate,FollowUp,amount,BranchName,DoctorName)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?);`, [data.Prescription[i].PrescriptionId, data.Prescription[i].PatientId, data.Prescription[i].Bp, data.Prescription[i].Rbs, data.Prescription[i].Height, data.Prescription[i].Weight, data.Prescription[i].Visited, data.Prescription[i].FollowUpDate, data.Prescription[i].FollowUp, data.Prescription[i].Amount, data.Prescription[i].DoctorName, data.Prescription[i].BranchName]
-                            )
+                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?);`, [data.Prescription[i].PrescriptionId, data.Prescription[i].PatientId, data.Prescription[i].Bp, data.Prescription[i].Rbs, data.Prescription[i].Height, data.Prescription[i].Weight, data.Prescription[i].Visited, data.Prescription[i].FollowUpDate, data.Prescription[i].FollowUp, data.Prescription[i].Amount, data.Prescription[i].DoctorName, data.Prescription[i].BranchName],
+                                (data) => {
+                                    console.log("Done")
+                                },
+                                (err) => {
+                                    console.log("Error")
+                                })
                         }
 
                         for (let i = 0; i < data.PresRoga.length; i++) {
@@ -321,34 +340,24 @@ export default function App() {
                         for (let i = 0; i < data.Receipt.length; i++) {
                             tx.executeSql(`INSERT INTO Receipt (Prescription,Aushadham,Dose,Samayam,Anupanam) VALUES (?,?,?,?,?);`, [data.Receipt[i].Prescription, data.Receipt[i].Aushadham, data.Receipt[i].Dose, data.Receipt[i].Samayam, data.Receipt[i].Anupanam])
                         }
-                        setLogged(true)
-                        setRestoring(false)
-                        setRestoreVisible(false)
                     })
                 }
             })
             .catch((error) => console.log(error));
     }
 
-    // const readDb = () => {
-    //     console.log("Reading")
+    const readDb = () => {
+        console.log("Reading")
 
-    //     db.transaction((tx) => {
-    //         tx.executeSql(`SELECT * FROM Roga`, [], (_, { rows: { _array } }) => {
-    //             console.log(_array)
-    //         }, (err) => console.log("Error"))
-    //     })
-    // }
+        db.transaction((tx) => {
+            tx.executeSql(`SELECT * FROM Roga`, [], (_, { rows: { _array } }) => {
+                console.log(_array)
+            }, (err) => console.log("Error"))
+        })
+    }
 
     return (
         <>
-            <Modal visible={restoring} transparent={true}>
-                <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#00000099" }}>
-                    <View style={{ height: 100, width: 100, backgroundColor: "white", alignItems: "center", justifyContent: "center" }}>
-                        <ActivityIndicator size="large" color="black" />
-                    </View>
-                </View>
-            </Modal>
             <Modal visible={signinVisible}>
                 <View style={{ justifyContent: "center", alignItems: "center", flex: 1 }}>
                     <View style={styles.card}>
@@ -394,11 +403,11 @@ export default function App() {
                                         <AntDesign style={{ paddingRight: "2%" }} name="checkcircleo" size={20} color="white" />
                                     } onPress={() => restore()} />
                                 </View>
-                                {/* <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                                <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                                     <Button title="SHOW" buttonStyle={{ margin: 15, backgroundColor: "#1315EF", justifyContent: "flex-start" }} icon={
                                         <AntDesign style={{ paddingRight: "2%" }} name="checkcircleo" size={20} color="white" />
                                     } onPress={() => readDb()} />
-                                </View> */}
+                                </View>
                             </View>
                         </View>
                     </View>
